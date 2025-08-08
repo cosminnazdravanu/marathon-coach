@@ -1,2 +1,0 @@
-source ~/.bashrc
-gpt_project_dump
