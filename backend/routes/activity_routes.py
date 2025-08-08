@@ -16,6 +16,9 @@ from backend.config import DEBUG_GPT
 from backend.utils.hr_plot import save_hr_plot_plotly
 from openai import OpenAI
 
+import secrets
+from fastapi import HTTPException
+
 router = APIRouter()
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 

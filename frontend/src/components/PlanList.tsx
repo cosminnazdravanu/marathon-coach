@@ -4,25 +4,27 @@ import { TrainingPlansService } from "../api/services/TrainingPlansService";
 import type { TrainingPlan } from "../api/models/TrainingPlan";
 import { parseISO } from "date-fns";
 
-// extend so TS knows date is a Date once we parse it
-interface ClientTrainingPlan extends Omit<TrainingPlan, "date"> {
-  date: Date;
-}
+type ClientTrainingPlan =
+  Omit<TrainingPlan, "date" | "type"> & {
+    date: Date;
+    type: "planned" | "strava";
+    originalType?: string | null;
+  };
 
-const raw = await TrainingPlansService.getAllPlansPlansGet();
-
-export function PlanList() {
+export default function PlanList() {
   const [plans, setPlans] = useState<ClientTrainingPlan[]>([]);
 
   useEffect(() => {
     (async () => {
-      // ⚓ call the correct generated method
       const raw = await TrainingPlansService.getAllPlansPlansGet();
 
-      // parse and cast to ClientTrainingPlan
       const parsed: ClientTrainingPlan[] = raw.map((p) => ({
         ...p,
-        date: parseISO(p.date),
+        // backend returns ISO date string -> convert to Date for UI
+        date: parseISO(String(p.date)),
+        // normalize so your UI treats these as “planned”
+        type: "planned",
+        originalType: p.type ?? null,
       }));
 
       setPlans(parsed);
@@ -33,11 +35,10 @@ export function PlanList() {
     <ul>
       {plans.map((p) => (
         <li key={p.id}>
-          <strong>{p.type}</strong> on {p.date.toLocaleDateString()} —{" "}
-          {p.description}
+          <strong>{p.originalType ?? "Planned"}</strong> on{" "}
+          {p.date.toLocaleDateString()} — {p.description}
         </li>
       ))}
     </ul>
   );
 }
-
