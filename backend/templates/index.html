@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Marathon Coach</title>
+</head>
+<body>
+  <h1>🏃‍♂️ Welcome to Your Marathon Coach App</h1>
+
+{% if valid_token %}
+    <p>✅ You are connected to your Strava account.</p>
+
+    {% if athlete %}
+      <p><strong>{{ athlete.firstname }} {{ athlete.lastname }}</strong></p>
+      <img src="{{ athlete.profile }}" alt="Profile Photo" style="width:100px; border-radius:50%;">
+    {% endif %}
+
+    <a href="/activity_feedback">
+      <button>📥 Get Feedback on Last Activity</button>
+    </a>
+    <form action="/disconnect_strava" method="post" style="margin-top: 20px;">
+      <button type="submit">🚫 Disconnect Strava</button>
+    </form>
+
+    {% if activities_list %}
+      <h3 style="margin-top: 30px;">📈 Last 20 Activities</h3>
+      <table border="1" cellpadding="6" cellspacing="0">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Name</th>
+            <th>Distance (km)</th>
+            <th>Duration</th>
+            <th>Avg Pace</th>
+            <th>Avg HR</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for activity in activities_list %}
+          <tr>
+            <td>{{ activity.date }}</td>
+            <td>
+              <a href="/activity_feedback?activity_id={{ activity.id }}">{{ activity.name }}</a>
+            </td>
+            <td>{{ activity.length_km }}</td>
+            <td>{{ activity.duration }}</td>
+            <td>{{ activity.avg_pace }}</td>
+            <td>{{ activity.avg_hr }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+{% else %}
+    <p>🔒 You are not connected to Strava yet.</p>
+    <a href="/connect_strava">
+      <button>🔗 Connect with Strava</button>
+    </a>
+{% endif %}
+
+
+
+</body>
+</html>

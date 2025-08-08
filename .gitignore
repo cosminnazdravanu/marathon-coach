@@ -1,0 +1,18 @@
+# env & secrets
+.env
+*/.env
+secrets/
+# Python venv & build
+venv/
+__pycache__/
+*.pyc
+# Local DB files
+backend/db/RunningCoach.db
+backend/plans.db
+# Frontend build
+frontend/dist/
+frontend/node_modules/
+# Misc
+logs/
+!.env.example
+!*/.env.example
