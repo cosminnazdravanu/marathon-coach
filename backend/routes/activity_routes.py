@@ -12,9 +12,8 @@ from backend.utils.utils import (
     safe_str, safe_round, safe_int, safe_int_scaled,
     format_date, format_duration, format_pace
 )
-from backend.config import DEBUG_GPT
 from backend.utils.hr_plot import save_hr_plot_plotly
-from openai import OpenAI
+from backend.services.gpt_helper import call_chat_completion
 
 import secrets
 from fastapi import HTTPException
@@ -216,25 +215,21 @@ async def activity_feedback(request: Request, activity_id: str | None = None):
         f"{'='*40}\n📊 Splits:\n{split_text}\n{'='*40}\n🟧 {lap_text}"
     )
 
-    if DEBUG_GPT:
-        feedback = "[ChatGPT not called – debug mode ON]"
-    else:
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        chat_response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an expert marathon coach. Analyze the workout below, "
-                        "comment on pacing strategy, heart rate drift, aerobic vs threshold distribution, "
-                        "and give feedback on execution and improvement tips. Be clear and detailed."
-                    )
-                },
-                {"role": "user", "content": summary}
-            ]
-        )
-        feedback = chat_response.choices[0].message.content
+    chat_response = call_chat_completion(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert marathon coach. Analyze the workout below, "
+                    "comment on pacing strategy, heart rate drift, aerobic vs threshold distribution, "
+                    "and give feedback on execution and improvement tips. Be clear and detailed."
+                )
+            },
+            {"role": "user", "content": summary}
+        ]
+    )
+    feedback = chat_response["choices"][0]["message"]["content"]
 
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     chart_html = f'<iframe src="/static/hr_plot.html?v={timestamp}" width="100%" height="400" style="border:none;"></iframe>'

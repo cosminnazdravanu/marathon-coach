@@ -2,7 +2,7 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -11,6 +11,7 @@ from backend.routes.training_plan_routes import router as training_plan_router
 from backend.routes.activity_routes import router as activity_router
 from backend.db.session import init_models
 import backend.config as config
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 # Initialize DB tables at startup
 @asynccontextmanager
@@ -19,6 +20,10 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 # Routers
 app.include_router(activity_router)

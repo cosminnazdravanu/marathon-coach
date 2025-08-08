@@ -44,10 +44,12 @@ export default function CalendarGrid({ weeksBack = 5, weeksForward = 5 }) {
       .then(res => res.json())
       .then(data => {
         const all = Object.values(data).flat();
-        const grouped = all.reduce((acc, e) => {
-          if (!acc[e.date]) acc[e.date] = { planned: [], strava: null };
-          if (e.type === 'planned') acc[e.date].planned.push(e);
-          else if (e.type === 'strava') acc[e.date].strava = e;
+        const grouped = data.reduce((acc, e) => {
+          const date = e.date;
+          const t = e.type || 'planned';   // <-- default it
+          if (!acc[date]) acc[date] = { planned: [], strava: null };
+          if (t === 'planned') acc[date].planned.push(e);
+          else if (t === 'strava') acc[date].strava = e;
           return acc;
         }, {});
         setTrainingPlan(grouped);
