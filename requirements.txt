@@ -1,0 +1,20 @@
+# web framework
+fastapi==0.116.1
+uvicorn[standard]==0.35.0   # includes watchfiles, httptools, websockets
+
+# templates & utils
+Jinja2==3.1.6
+python-dotenv==1.1.1
+requests==2.32.4
+
+# data layer & migrations
+SQLAlchemy==2.0.42
+alembic==1.16.4
+
+# models & APIs you use
+pydantic==2.11.7
+openai==1.97.1
+plotly==6.2.0
+itsdangerous==2.2.0
+
+cryptography>=42,<45
