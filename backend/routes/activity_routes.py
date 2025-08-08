@@ -17,7 +17,7 @@ from backend.utils.hr_plot import save_hr_plot_plotly
 from openai import OpenAI
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request):
@@ -52,12 +52,17 @@ def home(request: Request):
     })
 
 @router.get("/connect_strava")
-def connect_strava():
+def connect_strava(request: Request):
+    state = secrets.token_urlsafe(32)
+    request.session["oauth_state"] = state
     return RedirectResponse(
         url=(
-            f"https://www.strava.com/oauth/authorize?client_id={os.getenv('STRAVA_CLIENT_ID')}"
-            f"&response_type=code&redirect_uri={os.getenv('STRAVA_REDIRECT_URI')}"
+            f"https://www.strava.com/oauth/authorize"
+            f"?client_id={os.getenv('STRAVA_CLIENT_ID')}"
+            f"&response_type=code"
+            f"&redirect_uri={os.getenv('STRAVA_REDIRECT_URI')}"
             f"&approval_prompt=auto&scope=activity:read"
+            f"&state={state}"
         )
     )
 
@@ -68,9 +73,14 @@ def disconnect_strava(request: Request):
     return RedirectResponse(url="/", status_code=303)
 
 @router.get("/strava_callback")
-def strava_callback(code: str | None = None, request: Request | None = None):
+def strava_callback(request: Request, code: str | None = None, state: str | None = None):
     if not code:
         return HTMLResponse("Authorization failed", status_code=400)
+
+    saved = request.session.get("oauth_state")
+    if not state or not saved or state != saved:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    request.session.pop("oauth_state", None)  # one-time use
 
     token_url = "https://www.strava.com/api/v3/oauth/token"
     payload = {
