@@ -16,3 +16,9 @@ frontend/node_modules/
 logs/
 !.env.example
 !*/.env.example
+frontend/npm
+frontend/npx
+*.bak
+frontend/npm
+frontend/npx
+*.bak
