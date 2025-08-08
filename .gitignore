@@ -1,26 +1,57 @@
-# env & secrets
+# === env & secrets ===
 .env
+*.env
+.env.*
 */.env
-secrets/
-# Python venv & build
-venv/
-__pycache__/
-*.pyc
-# Local DB files
-backend/db/RunningCoach.db
-backend/plans.db
-# Frontend build
-frontend/dist/
-frontend/node_modules/
-# Misc
-logs/
+*/.env.*
 !.env.example
 !*/.env.example
+secrets/
+
+# === Python venv & caches ===
+venv/
+.venv/
+*/.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# === Databases (SQLite) ===
+*.db
+*.sqlite3
+
+# === Backend generated static ===
+backend/static/hr_plot*.html
+
+# === Frontend build & caches ===
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.vite-temp/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.log
 frontend/npm
 frontend/npx
-*.bak
-frontend/npm
-frontend/npx
+
+# === Editors/OS ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# === Misc ===
+logs/
 *.bak
 project_overview.txt
 */project_overview.txt
