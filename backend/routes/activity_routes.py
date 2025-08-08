@@ -80,6 +80,7 @@ def strava_callback(request: Request, code: str | None = None, state: str | None
     saved = request.session.get("oauth_state")
     if not state or not saved or state != saved:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
     # one-time use
     request.session.pop("oauth_state", None)
 
