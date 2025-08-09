@@ -1,11 +1,11 @@
 # backend/routes/training_plan_routes.py
-
-from fastapi import APIRouter, Depends, HTTPException
 from typing import List
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from backend.db.session import SessionLocal
-from backend.schemas import TrainingPlan
 from backend.db.models import TrainingPlan as ORMTrainingPlan
+from backend.schemas import TrainingPlan
+from backend.deps.auth import get_current_user
 
 router = APIRouter(tags=["Training Plans"])
 
@@ -16,102 +16,113 @@ def get_db():
     finally:
         db.close()
 
-# # 2) Pydantic schema can stay mostly the same (no id on input)
-# class TrainingPlan(BaseModel):
-#     id: Optional[int] = None
-#     date: str
-#     type: Optional[str] = None
-#     description: Optional[str] = None
-#     warmup_target: Optional[str] = None
-#     main_target: Optional[str] = None
-#     cooldown_target: Optional[str] = None
-#     terrain: Optional[str] = None
-#     notes: Optional[str] = None
-
-#     class Config:
-#         from_attributes = True
-#         schema_extra = {
-#             "example": {
-#                 "id": 1,
-#                 "date": "2025-08-10",
-#                 "type": "Long Run",
-#                 "description": "Build endurance with a steady 20 km run",
-#                 "warmup_target": "3 km easy",
-#                 "main_target": "14 km steady",
-#                 "cooldown_target": "3 km easy",
-#                 "terrain": "flat",
-#                 "notes": "Keep HR in Z2"
-#             }
-#         }
-
-# 3) Dependency to get a DB session per request
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# @router.get("/plans")
-# def get_all_plans(db: Session = Depends(get_db)):
-#     # Fetch all ORM objects
-#     plans = db.query(ORMTrainingPlan).all()
-
-#     # Convert to dicts and group by date
-#     grouped: dict[str, List[dict]] = {}
-#     for p in plans:
-#         item = {
-#             "id": p.id,
-#             "date": p.date,
-#             "type": p.type,
-#             "description": p.description,
-#             "warmup_target": p.warmup_target,
-#             "main_target": p.main_target,
-#             "cooldown_target": p.cooldown_target,
-#             "terrain": p.terrain,
-#             "notes": p.notes,
-#         }
-#         grouped.setdefault(p.date, []).append(item)
-
-#     return grouped
+def require_csrf(request: Request):
+    sess = request.session.get("csrf")
+    hdr = request.headers.get("X-CSRF-Token")
+    if not sess or not hdr or hdr != sess:
+        raise HTTPException(status_code=403, detail="CSRF check failed")
 
 @router.get("/plans", response_model=List[TrainingPlan])
-def get_all_plans(db: Session = Depends(get_db)):
-    return db.query(ORMTrainingPlan).all()
+def get_all_plans(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    return (
+        db.query(ORMTrainingPlan)
+        .filter(ORMTrainingPlan.user_id == current_user.id)
+        .order_by(ORMTrainingPlan.date.asc(), ORMTrainingPlan.id.asc())
+        .all()
+    )
 
 @router.post("/plans", status_code=201)
-def add_plan(plan: TrainingPlan, db: Session = Depends(get_db)):
-    orm_plan = ORMTrainingPlan(**plan.dict(exclude={"id"}))
+def add_plan(
+    plan: TrainingPlan,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    require_csrf(request)
+    data = plan.model_dump(exclude={"id"})
+    data["type"] = "planned"
+    orm_plan = ORMTrainingPlan(
+        **data,
+        user_id=current_user.id,   # 👈 set owner
+    )
     db.add(orm_plan)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(orm_plan)
     return {"message": "Plan added", "id": orm_plan.id}
 
+def _get_owned_plan(db: Session, plan_id: int, user_id: int) -> ORMTrainingPlan | None:
+    return (
+        db.query(ORMTrainingPlan)
+        .filter(ORMTrainingPlan.id == plan_id, ORMTrainingPlan.user_id == user_id)
+        .order_by(ORMTrainingPlan.date.asc(), ORMTrainingPlan.id.asc())
+        .first()
+    )
+
 @router.put("/plans/{plan_id}")
-def update_plan(plan_id: int, plan: TrainingPlan, db: Session = Depends(get_db)):
-    orm_plan = db.get(ORMTrainingPlan, plan_id)
+def update_plan(
+    plan_id: int,
+    plan: TrainingPlan,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    require_csrf(request)
+    orm_plan = _get_owned_plan(db, plan_id, current_user.id)
     if not orm_plan:
         raise HTTPException(status_code=404, detail="Plan not found")
-    for field, value in plan.dict(exclude={"id"}).items():
+    for field, value in plan.model_dump(exclude={"id"}).items():
+        if field == "type":
+            value = "planned"
         setattr(orm_plan, field, value)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"message": "Plan updated"}
 
 @router.patch("/plans/{plan_id}")
-def patch_plan(plan_id: int, plan: TrainingPlan, db: Session = Depends(get_db)):
-    orm_plan = db.get(ORMTrainingPlan, plan_id)
+def patch_plan(
+    plan_id: int,
+    plan: TrainingPlan,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    require_csrf(request)
+    orm_plan = _get_owned_plan(db, plan_id, current_user.id)
     if not orm_plan:
         raise HTTPException(status_code=404, detail="Plan not found")
-    # Only update date
     orm_plan.date = plan.date
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"message": "Plan date updated"}
 
 @router.delete("/plans/{plan_id}")
-def delete_plan(plan_id: int, db: Session = Depends(get_db)):
-    orm_plan = db.get(ORMTrainingPlan, plan_id)
+def delete_plan(
+    plan_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    require_csrf(request)
+    orm_plan = _get_owned_plan(db, plan_id, current_user.id)
     if not orm_plan:
         raise HTTPException(status_code=404, detail="Plan not found")
     db.delete(orm_plan)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"message": "Plan deleted"}

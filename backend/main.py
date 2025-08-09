@@ -1,35 +1,24 @@
 # backend/main.py
 import os
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-
-from backend.routes.training_plan_routes import router as training_plan_router
-from backend.routes.activity_routes import router as activity_router
-from backend.db.session import init_models
-import backend.config as config
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
-# Initialize DB tables at startup
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_models()
-    yield
+import backend.config as config
+from backend.routes.auth_routes import router as auth_router
+from backend.routes.activity_routes import router as activity_router
+from backend.routes.training_plan_routes import router as training_plan_router
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
+# Prometheus metrics
 @app.get("/metrics")
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
-# Routers
-app.include_router(activity_router)
-app.include_router(training_plan_router)
-
-# CORS
+# CORS (adjust as needed for your dev/prod hosts)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -41,12 +30,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Cookie-based sessions (no Redis)
+# Cookie-based sessions (set https_only=True in production over HTTPS)
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SECRET_KEY"),
+    secret_key=os.getenv("SECRET_KEY", "dev-secret-change-me"),
     same_site="lax",
-    https_only=False,             # set True in prod behind HTTPS
+    https_only=False,  # True in prod
     max_age=14 * 24 * 60 * 60,
 )
 
@@ -63,3 +52,8 @@ def read_root():
         "message": "Marathon Coach FastAPI backend is running 🚀",
         "strava_client_id": bool(config.STRAVA_CLIENT_ID),
     }
+
+# Routers
+app.include_router(auth_router)
+app.include_router(activity_router)
+app.include_router(training_plan_router)

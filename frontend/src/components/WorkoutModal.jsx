@@ -1,3 +1,4 @@
+// src/components/WorkoutModal.jsx
 import { useEffect, useState, useRef } from "react";
 import Draggable from "react-draggable";
 import { ResizableBox } from "react-resizable";
@@ -5,7 +6,14 @@ import "react-resizable/css/styles.css";
 import { motion, AnimatePresence } from "framer-motion";
 import { getLabelForDate } from "../../utils/dateHelpers";
 
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const isMobile = () => window.innerWidth < 768;
+
+async function csrf() {
+  const r = await fetch(`${API}/auth/csrf`, { credentials: "include" });
+  const j = await r.json();
+  return j.csrf;
+}
 
 export default function WorkoutModal({
   visible,
@@ -16,71 +24,107 @@ export default function WorkoutModal({
   containerRef,
 }) {
   const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
   const dragRef = useRef(null);
   const backdropRef = useRef(null);
-  const [size, setSize] = useState({ width: 400, height: 300 });
+
+  const [size, setSize] = useState(() => {
+    const saved = localStorage.getItem("modalSize");
+    return saved ? JSON.parse(saved) : { width: 400, height: 300 };
+  });
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const prevSizeRef = useRef(size);
-  const API = import.meta.env.VITE_API_URL || ""; 
 
   // ESC to close
   useEffect(() => {
-    const handler = (e) => {
-      if (e.key === "Escape") onClose();
-    };
+    const handler = (e) => e.key === "Escape" && onClose();
     if (visible) window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [visible]);
+  }, [visible, onClose]);
 
-  // Center in container on open
+  // Center in container on open + hydrate fields
   useEffect(() => {
-    if (visible && containerRef?.current && !isMobile()) {
-      const { left, top, width, height } = containerRef.current.getBoundingClientRect();
-      const x = left + (width  - size.width ) / 2;
-      const y = top  + (height - size.height) / 2;
-      setPosition({ x, y });
-    }
     if (visible) {
       setDescription(editingWorkout?.description || "");
+      if (containerRef?.current && !isMobile()) {
+        const { left, top, width, height } =
+          containerRef.current.getBoundingClientRect();
+        const x = left + (width - size.width) / 2;
+        const y = top + (height - size.height) / 2;
+        setPosition({ x, y });
+      } else {
+        // mobile: let it stick to the viewport center
+        setPosition({ x: 0, y: 0 });
+      }
     }
   }, [visible, containerRef, editingWorkout, size]);
 
-  const handleSave = async () => {
-    const payload = {
-      date,
-      type: "planned",
-      description,
-      warmup_target: null,
-      main_target: null,
-      cooldown_target: null,
-      terrain: null,
-      notes: null,
-    };
+  async function handleSave() {
+    if (!description.trim()) return;
+    setSubmitting(true);
+    try {
+      const payload = {
+        date,
+        type: "planned",
+        description: description.trim(),
+        warmup_target: null,
+        main_target: null,
+        cooldown_target: null,
+        terrain: null,
+        notes: null,
+      };
 
-    const base = `${API}/plans`;
-    const url  = editingWorkout?.id ? `${base}/${editingWorkout.id}` : base;
-    const method = editingWorkout?.id ? "PUT"   : "POST";
+      const base = `${API}/plans`;
+      const url = editingWorkout?.id ? `${base}/${editingWorkout.id}` : base;
+      const method = editingWorkout?.id ? "PUT" : "POST";
 
-    await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+      const token = await csrf();
+      const res = await fetch(url, {
+        method,
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": token,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    onClose();
-    if (onSaveSuccess) onSaveSuccess();
-  };
+      if (!res.ok) throw new Error(await res.text());
 
-  const handleDelete = async () => {
+      onClose();
+      onSaveSuccess && onSaveSuccess();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to save workout.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
     if (!editingWorkout?.id) return;
+    if (!confirm("Delete this workout?")) return;
 
-    await fetch(`${API}/plans/${editingWorkout.id}`, {
-      method: "DELETE",
-    });
+    setSubmitting(true);
+    try {
+      const token = await csrf();
+      const res = await fetch(`${API}/plans/${editingWorkout.id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "X-CSRF-Token": token },
+      });
+      if (!res.ok) throw new Error(await res.text());
 
-    onClose();
-    if (onSaveSuccess) onSaveSuccess();
-  };
+      onClose();
+      onSaveSuccess && onSaveSuccess();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete workout.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   const onResizeStop = (_, data) => {
     setSize(data.size);
@@ -89,14 +133,12 @@ export default function WorkoutModal({
 
   const onResize = (_, { size: newSize, handle }) => {
     const { width: oldW, height: oldH } = prevSizeRef.current;
-    const deltaW = newSize.width  - oldW;
+    const deltaW = newSize.width - oldW;
     const deltaH = newSize.height - oldH;
     let { x, y } = position;
 
-    // if resizing from the left, shift x right by the width gain
-    if (handle.includes("w")) x -= deltaW;
-    // if resizing from the top, shift y down by the height gain
-    if (handle.includes("n")) y -= deltaH;
+    if (handle.includes("w")) x -= deltaW; // resizing from left
+    if (handle.includes("n")) y -= deltaH; // resizing from top
 
     setPosition({ x, y });
     setSize(newSize);
@@ -117,7 +159,7 @@ export default function WorkoutModal({
           <div
             ref={backdropRef}
             className="absolute inset-0"
-            onClick={onClose}
+            onClick={() => !submitting && onClose()}
             style={{ zIndex: 0 }}
           />
 
@@ -139,9 +181,9 @@ export default function WorkoutModal({
               >
                 {/* wrap in a form so Enter will submit */}
                 <form
-                  onSubmit={e => {
-                    e.preventDefault();       // don’t reload the page
-                    handleSave();             // save + close
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!submitting) handleSave();
                   }}
                 >
                   <ResizableBox
@@ -150,9 +192,7 @@ export default function WorkoutModal({
                     minConstraints={[300, 200]}
                     maxConstraints={[800, 800]}
                     resizeHandles={
-                      isMobile()
-                        ? []
-                        : ["se", "e", "s", "n", "w", "ne", "nw", "sw"]
+                      isMobile() ? [] : ["se", "e", "s", "n", "w", "ne", "nw", "sw"]
                     }
                     onResize={onResize}
                     onResizeStop={onResizeStop}
@@ -160,10 +200,16 @@ export default function WorkoutModal({
                   >
                     <div className="modal-header cursor-move mb-4">
                       <h3 className="text-lg font-semibold">
-                        {editingWorkout ? "Edit" : "New"} Workout – {getLabelForDate(date)}
+                        {editingWorkout ? "Edit" : "New"} Workout –{" "}
+                        {getLabelForDate(date)}
                       </h3>
                     </div>
+
+                    <label className="sr-only" htmlFor="workout-desc">
+                      Workout description
+                    </label>
                     <input
+                      id="workout-desc"
                       type="text"
                       placeholder="Planned Workout"
                       value={description}
@@ -171,14 +217,17 @@ export default function WorkoutModal({
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4"
                       autoFocus
                       required
-                      maxLength={150} //trebuie sa vad cat e in baza de date
+                      maxLength={150}
+                      disabled={submitting}
                     />
+
                     <div className="flex justify-between mt-auto">
                       {editingWorkout && (
                         <button
                           type="button"
                           onClick={handleDelete}
-                          className="px-4 py-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200"
+                          disabled={submitting}
+                          className="px-4 py-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 disabled:opacity-60"
                         >
                           Delete
                         </button>
@@ -187,15 +236,17 @@ export default function WorkoutModal({
                         <button
                           type="button"
                           onClick={onClose}
-                          className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+                          disabled={submitting}
+                          className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 disabled:opacity-60"
                         >
                           Cancel
                         </button>
                         <button
                           type="submit"
-                          className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                          disabled={submitting}
+                          className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
                         >
-                          Save
+                          {submitting ? "Saving…" : "Save"}
                         </button>
                       </div>
                     </div>

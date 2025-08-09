@@ -1,13 +1,18 @@
-from fastapi import Request, APIRouter
+# backend/routes/activity_routes.py
+
+from fastapi import Request, APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 import os
 import httpx
+import secrets
 from collections import defaultdict
 from datetime import datetime
 
-from backend.services.token_manager import get_access_token, save_tokens
+from backend.deps.auth import get_current_user
+from backend.services.token_manager import get_access_token, save_tokens, delete_tokens
+from backend.services.identity_manager import link_strava_identity, unlink_strava_identity
 from backend.utils.utils import (
     safe_str, safe_round, safe_int, safe_int_scaled,
     format_date, format_duration, format_pace
@@ -15,24 +20,30 @@ from backend.utils.utils import (
 from backend.utils.hr_plot import save_hr_plot_plotly
 from backend.services.gpt_helper import call_chat_completion
 
-import secrets
-from fastapi import HTTPException
-
 router = APIRouter()
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
+
+# --- CSRF helper (matches your /auth/* approach) ---
+def require_csrf(request: Request):
+    sess = request.session.get("csrf")
+    hdr = request.headers.get("X-CSRF-Token")
+    if not sess or not hdr or hdr != sess:
+        raise HTTPException(status_code=403, detail="CSRF check failed")
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request):
     """
-    Synchronous home handler is OK; use httpx sync client for the single call here.
+    Public home. If logged in, try to show Strava info for the *local* user.
     """
-    user_id = request.session.get("user_id")
+    local_user_id = request.session.get("user_id")  # local user id from session-auth
+
     valid_token = False
     athlete = None
     activities_list = []
 
-    if user_id:
-        access_token = get_access_token(user_id)
+    if local_user_id:
+        # Always key by our local user id (cast to str if your token manager stores strings)
+        access_token = get_access_token(str(local_user_id))
         if access_token:
             valid_token = True
             headers = {"Authorization": f"Bearer {access_token}"}
@@ -43,8 +54,9 @@ def home(request: Request):
             except httpx.HTTPError:
                 pass
 
+            # If your helper expects the same key as token storage, pass local id
             from backend.services.strava_api import get_last_20_activities
-            activities_list = get_last_20_activities(user_id)
+            activities_list = get_last_20_activities(str(local_user_id))
 
     return templates.TemplateResponse("index.html", {
         "request": request,
@@ -54,12 +66,15 @@ def home(request: Request):
     })
 
 @router.get("/connect_strava")
-def connect_strava(request: Request):
+def connect_strava(request: Request, current_user = Depends(get_current_user)):
+    """
+    Start OAuth for the currently logged-in local user.
+    """
     state = secrets.token_urlsafe(32)
     request.session["oauth_state"] = state
     return RedirectResponse(
         url=(
-            f"https://www.strava.com/oauth/authorize"
+            "https://www.strava.com/oauth/authorize"
             f"?client_id={os.getenv('STRAVA_CLIENT_ID')}"
             f"&response_type=code"
             f"&redirect_uri={os.getenv('STRAVA_REDIRECT_URI')}"
@@ -68,14 +83,16 @@ def connect_strava(request: Request):
         )
     )
 
-@router.post("/disconnect_strava")
-def disconnect_strava(request: Request):
-    request.session.clear()
-    print("👋 User disconnected from Strava.")
-    return RedirectResponse(url="/", status_code=303)
-
 @router.get("/strava_callback")
-def strava_callback(request: Request, code: str | None = None, state: str | None = None):
+def strava_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    current_user = Depends(get_current_user),
+):
+    """
+    Finish OAuth: store Strava tokens for the logged-in local user and persist the identity link.
+    """
     if not code:
         return HTMLResponse("Authorization failed", status_code=400)
 
@@ -89,9 +106,8 @@ def strava_callback(request: Request, code: str | None = None, state: str | None
         "client_id": os.getenv("STRAVA_CLIENT_ID"),
         "client_secret": os.getenv("STRAVA_CLIENT_SECRET"),
         "code": code,
-        "grant_type": "authorization_code"
+        "grant_type": "authorization_code",
     }
-
     try:
         r = httpx.post(token_url, data=payload, timeout=20.0)
         r.raise_for_status()
@@ -99,25 +115,47 @@ def strava_callback(request: Request, code: str | None = None, state: str | None
         return HTMLResponse(f"Token exchange failed: {e}", status_code=400)
 
     tokens = r.json()
-    user_id = str(tokens["athlete"]["id"])
-    save_tokens(user_id, tokens)
-    request.session["user_id"] = user_id
+
+    # 🔑 Save tokens under *local* user id
+    save_tokens(str(current_user.id), tokens)
+
+    # 🔗 Persist the identity link (provider='strava', provider_user_id=<athlete.id>)
+    try:
+        link_strava_identity(current_user.id, tokens)
+    except Exception as e:
+        # Non-fatal; log for now
+        print(f"⚠️ identity link warning: {e}")
+
     return RedirectResponse(url="/activity_feedback")
 
-@router.get("/activity_feedback", response_class=HTMLResponse)
-async def activity_feedback(request: Request, activity_id: str | None = None):
-    user_id = request.session.get("user_id")
-    if not user_id:
-        return RedirectResponse("/connect_strava")
+@router.post("/disconnect_strava")
+def disconnect_strava(request: Request, current_user = Depends(get_current_user)):
+    """
+    Disconnect Strava for the logged-in user WITHOUT logging them out of your app.
+    """
+    require_csrf(request)  # enable CSRF on state-changing POSTs
+    # 🧹 Remove only Strava tokens/link; keep the session
+    delete_tokens(str(current_user.id))
+    try:
+        unlink_strava_identity(current_user.id)
+    except Exception as e:
+        print(f"⚠️ unlink warning: {e}")
+    return RedirectResponse(url="/", status_code=303)
 
-    access_token = get_access_token(user_id)
+@router.get("/activity_feedback", response_class=HTMLResponse)
+async def activity_feedback(request: Request, activity_id: str | None = None, current_user = Depends(get_current_user)):
+    """
+    Requires login + a connected Strava account.
+    """
+    local_user_id = str(current_user.id)
+    access_token = get_access_token(local_user_id)
     if not access_token:
         return RedirectResponse("/connect_strava")
 
     headers = {"Authorization": f"Bearer {access_token}"}
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # Step 1: Get latest activity if none specified
+        # 1) Latest activity if none specified
         if not activity_id:
             r = await client.get("https://www.strava.com/api/v3/athlete/activities", headers=headers)
             r.raise_for_status()
@@ -127,7 +165,7 @@ async def activity_feedback(request: Request, activity_id: str | None = None):
             latest_activity = activities[0]
             activity_id = latest_activity["id"]
 
-        # Step 2: Detailed activity
+        # 2) Detailed activity
         activity_url = f"https://www.strava.com/api/v3/activities/{activity_id}"
         r = await client.get(activity_url, headers=headers)
         r.raise_for_status()
@@ -147,7 +185,7 @@ async def activity_feedback(request: Request, activity_id: str | None = None):
         cadence = safe_int(safe_round(activity.get("average_cadence"), multiplier=2, decimals=0))
         splits = activity.get("splits_metric", [])
 
-        # Step 3: HR Stream
+        # 3) HR Stream
         stream_url = f"https://www.strava.com/api/v3/activities/{activity_id}/streams"
         params = {"keys": "heartrate,distance", "key_by_type": True}
         r = await client.get(stream_url, headers=headers, params=params)
@@ -159,7 +197,7 @@ async def activity_feedback(request: Request, activity_id: str | None = None):
         if hr_data and dist_data:
             save_hr_plot_plotly(dist_data, hr_data, distance_km)
 
-        # Step 4: HR split map
+        # 4) HR split map
         split_hr_map = defaultdict(list)
         for dist, hr in zip(dist_data, hr_data):
             split_index = int(dist // 1000)
@@ -170,7 +208,7 @@ async def activity_feedback(request: Request, activity_id: str | None = None):
             split_max_hr = max(split_hr_map.get(i - 1, []), default="N/A")
             split_max_hrs[i] = split_max_hr
 
-        # Step 5: Format splits
+        # 5) Format splits
         split_text = ""
         for i, split in enumerate(splits, 1):
             pace = format_pace(1000, split.get("average_speed", 0))
@@ -182,7 +220,7 @@ async def activity_feedback(request: Request, activity_id: str | None = None):
             dist_km_s = split.get("distance", 0) / 1000
             split_text += f"{i:>2}: {dist_km_s:.2f} km | {pace:<8} | {move_str:<8} | HR {hr:<3} | Max HR {max_hr_s:<3} | Elev {elev_s}\n"
 
-        # Step 6: Custom laps
+        # 6) Custom laps
         lap_text = "Custom Laps:\n"
         r = await client.get(f"https://www.strava.com/api/v3/activities/{activity_id}/laps", headers=headers)
         r.raise_for_status()
@@ -197,7 +235,7 @@ async def activity_feedback(request: Request, activity_id: str | None = None):
             elev_s = f"{safe_round(lap.get('total_elevation_gain'), decimals=1, default=0):+}m"
             lap_text += f"{i:>2}: {dist:.2f} km | Time {move:<5} | Pace {pace:<8} | HR {hr} | Max {max_hr} | Elev {elev_s} | Cadence {cadence}\n"
 
-    # Step 7: Privacy warnings
+    # 7) Privacy warnings
     privacy_warning = ""
     if dist_data and dist_data[0] > 30:
         privacy_warning += "\n⚠️ Missing early HR data — likely due to start location privacy settings.\n"
@@ -206,7 +244,7 @@ async def activity_feedback(request: Request, activity_id: str | None = None):
     if privacy_warning:
         split_text += privacy_warning
 
-    # Step 8: Compose summary
+    # 8) Compose summary + call coach
     summary = (
         f"🏃‍♂️ Workout: {name}\n📍 Start: {start_time}\n📏 Distance: {distance_km} km\n"
         f"⏱️ Moving Time: {moving} min | Elapsed: {elapsed} min\n"
@@ -231,6 +269,4 @@ async def activity_feedback(request: Request, activity_id: str | None = None):
     )
     feedback = chat_response["choices"][0]["message"]["content"]
 
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    chart_html = f'<iframe src="/static/hr_plot.html?v={timestamp}" width="100%" height="400" style="border:none;"></iframe>'
-    return HTMLResponse(content=f"<pre>{summary}</pre>{chart_html}<br><br>💬 AI Coach Feedback:<br><pre>{feedback}</pre>")
+    timestamp = datetime.now().strfti

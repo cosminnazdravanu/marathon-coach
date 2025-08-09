@@ -109,3 +109,13 @@ def refresh_tokens(user_id: str, refresh_token: str | None) -> str | None:
     except httpx.HTTPError as e:
         print(f"❌ Failed to refresh token for {user_id}: {e}")
         return None
+
+def delete_tokens(user_id: str) -> None:
+    db: Session = SessionLocal()
+    try:
+        orm = db.get(ORMStravaToken, user_id)
+        if orm:
+            db.delete(orm)
+            db.commit()
+    finally:
+        db.close()

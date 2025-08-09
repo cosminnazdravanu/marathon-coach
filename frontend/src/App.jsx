@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import CalendarGrid from './components/CalendarGrid';
+import LoginForm from "./components/LoginForm";
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState('training');
@@ -55,6 +56,7 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
+      {/* <LoginForm /> */}
       {/* Top Menu */}
       <div className="h-[40px] mt-1 flex items-center justify-center bg-white shadow-md"> {/* outline outline-gray-600 */}
         <button onClick={() => setActiveMenu('training')}  className="px-4 mx-2 rounded hover:bg-gray-200">🏃‍♂️ Training</button><div className="text-gray-300">|</div>
