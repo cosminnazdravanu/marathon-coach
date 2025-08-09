@@ -18,6 +18,11 @@ app = FastAPI()
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+# Routers
+app.include_router(auth_router)
+app.include_router(activity_router)
+app.include_router(training_plan_router)
+
 # CORS (adjust as needed for your dev/prod hosts)
 app.add_middleware(
     CORSMiddleware,
@@ -33,7 +38,7 @@ app.add_middleware(
 # Cookie-based sessions (set https_only=True in production over HTTPS)
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SECRET_KEY", "dev-secret-change-me"),
+    secret_key=os.getenv("SECRET_KEY"),
     same_site="lax",
     https_only=False,  # True in prod
     max_age=14 * 24 * 60 * 60,
@@ -46,14 +51,10 @@ app.mount(
     name="static",
 )
 
-@app.get("/")
-def read_root():
+@app.get("/status")
+def read_status():
     return {
         "message": "Marathon Coach FastAPI backend is running 🚀",
         "strava_client_id": bool(config.STRAVA_CLIENT_ID),
     }
 
-# Routers
-app.include_router(auth_router)
-app.include_router(activity_router)
-app.include_router(training_plan_router)

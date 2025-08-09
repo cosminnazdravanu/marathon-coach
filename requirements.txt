@@ -20,5 +20,7 @@ itsdangerous==2.2.0
 cryptography>=42,<45
 structlog>=22.3.0
 prometheus-client>=0.18.0
-passlib[bcrypt]==1.7.4
 email-validator
+tzdata>=2025.2
+passlib==1.7.4
+bcrypt==3.2.2

@@ -1,3 +1,4 @@
+# backend/utils/utils.py
 from datetime import datetime
 
 def safe_round(value, divisor=1, default="N/A", multiplier=1, decimals=2):
@@ -6,7 +7,7 @@ def safe_round(value, divisor=1, default="N/A", multiplier=1, decimals=2):
     except (TypeError, ZeroDivisionError):
         return default
 
-def safe_int(value, default="N/A"):
+def safe_int(value, default="N/A"): # Convert to int, used for display (returns "N/A" on failure)
     try:
         return int(round(value))
     except (TypeError, ValueError):
@@ -15,12 +16,32 @@ def safe_int(value, default="N/A"):
 def safe_str(value, default="N/A"):
     return str(value) if value is not None else default
 
-def safe_int_scaled(value, multiplier=1, default="N/A"):
+def safe_int_scaled(value, multiplier=1, default="N/A"): # Convert to int, used for display (returns "N/A" on failure)
     try:
         return int(round(value * multiplier))
     except (TypeError, ValueError):
         return default
     
+def to_int(value, default=0): # Convert to int, used for display (returns 0 on failure)
+    """Always return an int for math; never 'N/A'."""
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return default
+
+def to_float(value, default=0.0):
+    """Always return a float for math."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+def to_int_scaled(value, multiplier=1, default=0): # Convert to int, used for display (returns 0 on failure)
+    try:
+        return int(round(float(value) * multiplier))
+    except (TypeError, ValueError):
+        return default
+        
 def format_date(date_str, fmt="%a, %d %b %Y – %H:%M", default="N/A"):
     """
     Converts an ISO 8601 date string (like '2025-07-27T08:34:12Z')

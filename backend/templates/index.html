@@ -6,7 +6,8 @@
 <body>
   <h1>🏃‍♂️ Welcome to Your Marathon Coach App</h1>
 
-{% if valid_token %}
+{% if logged_in %}
+  {% if valid_token %}
     <p>✅ You are connected to your Strava account.</p>
 
     {% if athlete %}
@@ -18,6 +19,7 @@
       <button>📥 Get Feedback on Last Activity</button>
     </a>
     <form action="/disconnect_strava" method="post" style="margin-top: 20px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
       <button type="submit">🚫 Disconnect Strava</button>
     </form>
 
@@ -51,14 +53,15 @@
       </table>
     {% endif %}
 
-{% else %}
+  {% else %}
     <p>🔒 You are not connected to Strava yet.</p>
     <a href="/connect_strava">
       <button>🔗 Connect with Strava</button>
     </a>
+  {% endif %}
+{% else %}
+  <a href="/login?next=/"><button>🔐 Log in First</button></a>
 {% endif %}
-
-
 
 </body>
 </html>

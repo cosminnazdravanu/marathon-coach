@@ -78,3 +78,8 @@ def save_hr_plot_plotly(dist_data, hr_data, distance_km_total, filename="static/
 
     # Save plot to HTML
     pio.write_html(fig, file=filename, auto_open=False)
+
+    # NEW: return URL path for embedding
+    # convert "static/..." -> "/static/..."
+    web_path = "/" + str(output_path).replace("\\", "/")
+    return web_path

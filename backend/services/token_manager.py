@@ -76,13 +76,14 @@ def get_access_token(user_id: str) -> str | None:
     try:
         orm_token = db.get(ORMStravaToken, user_id)
         if not orm_token:
+            print(f"[TOKENS] no row for user_id={user_id!r}")
             return None
 
         if time.time() > orm_token.expires_at:
             # Decrypt refresh token before use
             rtok = _dec(orm_token.refresh_token)
             return refresh_tokens(user_id, rtok)
-
+        
         return _dec(orm_token.access_token)
     finally:
         db.close()
