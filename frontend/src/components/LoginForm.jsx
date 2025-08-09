@@ -1,7 +1,10 @@
+// src/components/LoginForm.jsx
 import { useState, useEffect, useMemo, useRef } from "react";
-import { login, register, me, logout } from "../api/auth";
+import { me, logout } from "../api/auth.js";              // ensure .js extension
+import { useAuth } from "../auth/AuthProvider.jsx";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000"; // ← make sure this is localhost:8000
+// keep API because you referenced it; prefer 127.0.0.1 for cookie consistency
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 function getNextPath() {
   const raw = new URLSearchParams(window.location.search).get("next") || "/";
@@ -14,6 +17,7 @@ function getNextPath() {
 }
 
 export default function LoginForm() {
+  const { login: authLogin, register: authRegister } = useAuth();
   const [user, setUser] = useState(null);
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
@@ -28,10 +32,9 @@ export default function LoginForm() {
     me()
       .then(u => {
         setUser(u);
-        // If already logged in when landing here, bounce once to backend (even if next === "/")
         if (u && !redirected.current) {
           redirected.current = true;
-          window.location.assign(`${API}${nextPath}`);
+          window.location.assign(nextPath); // ← no API prefix
         }
       })
       .catch(() => {});
@@ -41,18 +44,13 @@ export default function LoginForm() {
     e.preventDefault();
     setErr("");
     try {
-      const u = mode === "login"
-        ? await login(email, password)
-        : await register(email, password, name || null);
-      setUser(u);
-      // Always go to backend next ("/" included)
-      if (!redirected.current) {
-        redirected.current = true;
-        window.location.assign(`${API}${nextPath}`);
+      if (mode === "login") {
+        await authLogin(email, password);
+      } else {
+        await authRegister(email, password, name);
       }
     } catch (e) {
-      setErr("Authentication failed");
-      console.error(e);
+      setErr(e?.message || "Authentication failed");
     }
   }
 
@@ -65,17 +63,26 @@ export default function LoginForm() {
   if (user) {
     return (
       <div className="p-4 border rounded-lg bg-white shadow space-y-3">
-        <p>Signed in as <b>{user.email}</b>{user.name ? ` (${user.name})` : ""}</p>
+        <p>
+          Signed in as <b>{user.email}</b>
+          {user.name ? ` (${user.name})` : ""}
+        </p>
         <div className="flex gap-2">
-          <button className="px-3 py-1 border rounded" onClick={() => {
-            if (!redirected.current) {
-              redirected.current = true;
-              window.location.assign(`${API}${nextPath}`);
-            }
-          }}>
+          <button
+            className="px-3 py-1 border rounded"
+            onClick={() => {
+              if (!redirected.current) {
+                redirected.current = true;
+                window.location.assign(nextPath);
+                // or: window.location.assign(`${API}${nextPath}`);
+              }
+            }}
+          >
             Continue
           </button>
-          <button className="px-3 py-1 border rounded" onClick={onLogout}>Logout</button>
+          <button className="px-3 py-1 border rounded" onClick={onLogout}>
+            Logout
+          </button>
         </div>
       </div>
     );
@@ -84,24 +91,41 @@ export default function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="p-4 border rounded-lg bg-white shadow max-w-sm">
       <div className="flex gap-2 mb-3">
-        <button type="button" className={`px-3 py-1 border rounded ${mode==='login'?'font-bold':''}`} onClick={() => setMode("login")}>Login</button>
-        <button type="button" className={`px-3 py-1 border rounded ${mode==='register'?'font-bold':''}`} onClick={() => setMode("register")}>Register</button>
+        <button
+          type="button"
+          className={`px-3 py-1 border rounded ${mode === "login" ? "font-bold" : ""}`}
+          onClick={() => setMode("login")}
+        >
+          Login
+        </button>
+        <button
+          type="button"
+          className={`px-3 py-1 border rounded ${mode === "register" ? "font-bold" : ""}`}
+          onClick={() => setMode("register")}
+        >
+          Register
+        </button>
       </div>
+
       {mode === "register" && (
         <div className="mb-2">
           <label className="block text-sm mb-1">Name</label>
-          <input className="w-full border rounded px-2 py-1" value={name} onChange={e=>setName(e.target.value)} />
+          <input className="w-full border rounded px-2 py-1" value={name} onChange={e => setName(e.target.value)} />
         </div>
       )}
+
       <div className="mb-2">
         <label className="block text-sm mb-1">Email</label>
-        <input required type="email" className="w-full border rounded px-2 py-1" value={email} onChange={e=>setEmail(e.target.value)} />
+        <input required type="email" className="w-full border rounded px-2 py-1" value={email} onChange={e => setEmail(e.target.value)} />
       </div>
+
       <div className="mb-3">
         <label className="block text-sm mb-1">Password</label>
-        <input required type="password" className="w-full border rounded px-2 py-1" value={password} onChange={e=>setPassword(e.target.value)} />
+        <input required type="password" className="w-full border rounded px-2 py-1" value={password} onChange={e => setPassword(e.target.value)} />
       </div>
+
       {err && <p className="text-red-600 text-sm mb-2">{err}</p>}
+
       <button className="px-3 py-1 border rounded w-full" type="submit">
         {mode === "login" ? "Login" : "Create account"}
       </button>

@@ -1,19 +1,17 @@
-import { useAuth } from "./AuthProvider";
-import LoginForm from "../components/LoginForm"; // your earlier component
+// src/auth/RequireAuth.jsx
+import { useAuth } from "./AuthProvider.jsx";
+import LoginForm from "../components/LoginForm.jsx";
 
 export default function RequireAuth({ children }) {
   const { user, loading } = useAuth();
-
   if (loading) {
-    return <div style={{ padding: 24 }}>Loading…</div>;
+    console.debug("[RequireAuth] loading…");
+    return <div className="p-4">Loading…</div>;
   }
   if (!user) {
-    // no app for you until signed in
-    return (
-      <div className="min-h-screen grid place-items-center bg-gray-50">
-        <LoginForm />
-      </div>
-    );
+    console.debug("[RequireAuth] guest → showing LoginForm");
+    return <LoginForm />;
   }
+  console.debug("[RequireAuth] authenticated → render app");
   return children;
 }

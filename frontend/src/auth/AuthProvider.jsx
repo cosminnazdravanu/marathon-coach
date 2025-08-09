@@ -1,43 +1,61 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import * as api from "../api/auth";
+// frontend/src/auth/AuthProvider.jsx
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { me as apiMe, login as apiLogin, register as apiRegister, logout as apiLogout } from "../api/auth.js";
 
 const AuthContext = createContext(null);
+export const useAuth = () => useContext(AuthContext);
 
-export function AuthProvider({ children }) {
+export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // block UI until we know
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let mounted = true;
-    api.me().then(u => { if (mounted) setUser(u); }).finally(() => {
-      if (mounted) setLoading(false);
-    });
-    return () => { mounted = false; };
+    let done = false;
+    const safety = setTimeout(() => {
+      if (!done) {
+        console.warn("[AuthProvider] /auth/me timed out; assuming guest");
+        setUser(null);
+        setLoading(false);
+      }
+    }, 5000);
+
+    (async () => {
+      try {
+        console.log("[AuthProvider] fetching /auth/me …");
+        const u = await apiMe();
+        console.log("[AuthProvider] /auth/me result:", u);
+        setUser(u);
+      } catch (e) {
+        console.error("[AuthProvider] /auth/me error:", e);
+        setUser(null);
+      } finally {
+        done = true;
+        clearTimeout(safety);
+        setLoading(false);
+      }
+    })();
+
+    return () => clearTimeout(safety);
   }, []);
 
-  async function signIn(email, password) {
-    const u = await api.login(email, password);
-    setUser(u);
-    return u;
-  }
+  const value = useMemo(() => ({
+    user,
+    loading,
+    async login(email, password) {
+      const u = await apiLogin(email, password);
+      setUser(u);
+      return u;
+    },
+    async register(email, password, name) {
+      const u = await apiRegister(email, password, name);
+      setUser(u);
+      return u;
+    },
+    async logout() {
+      await apiLogout();
+      setUser(null);
+    },
+  }), [user, loading]);
 
-  async function signUp(email, password, name) {
-    const u = await api.register(email, password, name);
-    setUser(u);
-    return u;
-  }
-
-  async function signOut() {
-    await api.logout();
-    setUser(null);
-  }
-
-  const value = { user, loading, signIn, signUp, signOut };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
-  return ctx;
 }

@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 async function csrf() {
   const r = await fetch(`${API}/auth/csrf`, { credentials: "include" });
@@ -30,9 +30,33 @@ export async function register(email, password, name) {
 }
 
 export async function me() {
-  const r = await fetch(`${API}/auth/me`, { credentials: "include" });
-  if (!r.ok) return null;
-  return r.json();
+  // assumes you already have: const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort("timeout"), 4500);
+
+  try {
+    const r = await fetch(`${API}/auth/me`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+      signal: ctrl.signal,
+    });
+
+    if (!r.ok) return null;
+
+    // Prefer JSON if declared; otherwise try to parse text safely.
+    const ct = r.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      return await r.json();
+    }
+
+    const text = await r.text();
+    if (!text) return null;
+    try { return JSON.parse(text); } catch { return null; }
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function logout() {

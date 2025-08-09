@@ -26,15 +26,12 @@ app.include_router(training_plan_router)
 # CORS (adjust as needed for your dev/prod hosts)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    # Accept http://127.0.0.1:<any port> and http://localhost:<any port>
+    allow_origin_regex=r"^http://(127\.0\.0\.1|localhost):\d+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Cookie-based sessions (set https_only=True in production over HTTPS)
 app.add_middleware(
     SessionMiddleware,
