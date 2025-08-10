@@ -26,6 +26,8 @@ from backend.services.gpt_helper import call_chat_completion
 from urllib.parse import urlencode, parse_qs, quote
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from zoneinfo import ZoneInfo  # Python 3.9+
+from pathlib import Path
+from time import time
 
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 BACKEND_ORIGIN = os.getenv("BACKEND_ORIGIN", "http://localhost:8000")
@@ -328,7 +330,8 @@ async def activity_feedback(request: Request, activity_id: str | None = None):
             # If helper returns None, nothing to embed (keeps page clean)
         except Exception as e:
             logger.warning("HR plot render failed: %s", e)
-        if not hr_plot_html and os.path.exists("static/hr_plot.html"):
+        static_path = Path(__file__).parent / "static" / "hr_plot.html"
+        if not hr_plot_html and static_path.exists():
             hr_plot_html = "<iframe src='/static/hr_plot.html' style='width:100%;height:380px;border:0'></iframe>"
 
     # 4) HR split map

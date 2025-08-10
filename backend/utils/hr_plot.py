@@ -1,9 +1,12 @@
+# backend/utils/hr_plot.py
 import os
 import plotly.graph_objs as go
 import plotly.io as pio
 from pathlib import Path
 
-def save_hr_plot_plotly(dist_data, hr_data, distance_km_total, filename="static/hr_plot.html"):
+filename = os.path.join(os.path.dirname(__file__), "..", "static", "hr_plot.html")
+
+def save_hr_plot_plotly(dist_data, hr_data, distance_km_total, filename=filename):
     """
     Saves a heart rate vs. distance plot with HR zones shaded in the background.
     """
@@ -79,7 +82,20 @@ def save_hr_plot_plotly(dist_data, hr_data, distance_km_total, filename="static/
     # Save plot to HTML
     pio.write_html(fig, file=filename, auto_open=False)
 
+    # Return the URL path under the FastAPI /static mount
+    # Map backend/static/... -> /static/...
+    static_root = (Path(__file__).resolve().parent.parent / "static")
+    try:
+        rel = output_path.resolve().relative_to(static_root)
+        return f"/static/{rel.as_posix()}"
+    except ValueError:
+        # Fallbacks: handle "static/..." or anything else by ensuring a leading slash
+        p = output_path.as_posix()
+        if p.startswith("static/"):
+            return "/" + p
+        return "/" + p.lstrip("/")
+
     # NEW: return URL path for embedding
     # convert "static/..." -> "/static/..."
-    web_path = "/" + str(output_path).replace("\\", "/")
-    return web_path
+    # web_path = "/" + str(output_path).replace("\\", "/")
+    # return web_path
