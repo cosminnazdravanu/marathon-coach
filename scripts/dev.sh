@@ -8,7 +8,7 @@ set -euo pipefail
 BACK_PID=$!
 
 # frontend
-( cd frontend && npm run dev -- --host 127.0.0.1 ) &
+( cd frontend && npm run dev ) &
 FRONT_PID=$!
 
 # cleanup on exit

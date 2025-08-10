@@ -27,8 +27,8 @@ from urllib.parse import urlencode, parse_qs, quote
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from zoneinfo import ZoneInfo  # Python 3.9+
 
-FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5173")
-BACKEND_ORIGIN = os.getenv("BACKEND_ORIGIN", "http://127.0.0.1:8000")
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+BACKEND_ORIGIN = os.getenv("BACKEND_ORIGIN", "http://localhost:8000")
 REDIRECT_URI = f"{BACKEND_ORIGIN}/strava_callback"
 
 logger = logging.getLogger(__name__)

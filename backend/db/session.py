@@ -3,6 +3,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from .base import Base
 import os
+# Import the whole module so all models register with Base
+from . import models  # noqa: F401
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///backend/db/RunningCoach.db"
 engine = create_engine(
@@ -14,6 +16,9 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # ❌ REMOVE this in an Alembic-managed project:
 # Base.metadata.create_all(bind=engine)
+
+def init_models():
+    Base.metadata.create_all(bind=engine)
 
 # Optional dev-only escape hatch (off by default):
 if os.getenv("DB_CREATE_ALL") == "1":

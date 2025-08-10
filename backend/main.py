@@ -1,17 +1,34 @@
 # backend/main.py
 import os
-from fastapi import FastAPI, Response
+from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Response, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from .db.session import init_models
+from contextlib import asynccontextmanager
 
 import backend.config as config
 from backend.routes.auth_routes import router as auth_router
 from backend.routes.activity_routes import router as activity_router
 from backend.routes.training_plan_routes import router as training_plan_router
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app):
+    init_models()   # <- this creates missing tables
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
+@app.middleware("http")
+async def enforce_localhost(request: Request, call_next):
+    host = request.headers.get("host", "")
+    if host.startswith("127.0.0.1"):
+        # preserve path/query while redirecting
+        new_url = str(request.url).replace("127.0.0.1", "localhost")
+        return RedirectResponse(url=new_url, status_code=307)  # 307 keeps method + body
+    return await call_next(request)
 
 # Prometheus metrics
 @app.get("/metrics")
@@ -26,8 +43,8 @@ app.include_router(training_plan_router)
 # CORS (adjust as needed for your dev/prod hosts)
 app.add_middleware(
     CORSMiddleware,
-    # Accept http://127.0.0.1:<any port> and http://localhost:<any port>
-    allow_origin_regex=r"^http://(127\.0\.0\.1|localhost):\d+$",
+    # Accept only http://localhost:<any port>
+    allow_origin_regex=r"^http://localhost:\d+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,6 +56,7 @@ app.add_middleware(
     same_site="lax",
     https_only=False,  # True in prod
     max_age=14 * 24 * 60 * 60,
+    domain=os.getenv("SESSION_COOKIE_DOMAIN"),
 )
 
 # Static files

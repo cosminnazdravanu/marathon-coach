@@ -65,7 +65,7 @@ SECRET_KEY=
 
 # ===== Frontend (copy into frontend/.env) =====
 # Vite exposes only VITE_* to the client
-VITE_API_URL=http://127.0.0.1:8000
+VITE_API_URL=http://localhost:8000
 EOF
 
 # 5) Create backend/.env from template, fill SECRET_KEY automatically

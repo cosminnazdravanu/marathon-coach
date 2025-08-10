@@ -6,7 +6,8 @@ import "react-resizable/css/styles.css";
 import { motion, AnimatePresence } from "framer-motion";
 import { getLabelForDate } from "../../utils/dateHelpers";
 
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API = import.meta.env.VITE_API_URL;
+if (!API) throw new Error("VITE_API_URL is not set");
 const isMobile = () => window.innerWidth < 768;
 
 async function csrf() {

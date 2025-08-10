@@ -33,7 +33,8 @@ import {
 import { CalendarIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 
 // API base + CSRF helper
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API = import.meta.env.VITE_API_URL;
+if (!API) throw new Error("VITE_API_URL is not set");
 async function csrf() {
   const r = await fetch(`${API}/auth/csrf`, { credentials: "include" });
   return (await r.json()).csrf;

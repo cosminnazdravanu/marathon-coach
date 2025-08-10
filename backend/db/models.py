@@ -18,9 +18,6 @@ class TrainingPlan(Base):
     terrain = Column(String, nullable=True)
     notes = Column(String, nullable=True)
 
-# Optional: explicit index (redundant if column index=True)
-Index("ix_training_plan_user_id", TrainingPlan.user_id)
-
 class StravaToken(Base):
     __tablename__ = "strava_tokens"
     user_id       = Column(String,  primary_key=True)

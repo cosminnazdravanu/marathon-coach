@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "build:css": "npx tailwindcss --config tailwind.config.cjs -i src/index.css -o dist/tailwind.css",
-    "gen:types": "npx openapi-typescript http://127.0.0.1:8000/openapi.json --output src/api/models.ts"
+    "gen:types": "npx openapi-typescript http://localhost:8000/openapi.json --output src/api/models.ts"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.7",
