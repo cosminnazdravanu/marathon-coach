@@ -67,3 +67,23 @@ export async function logout() {
     headers: { "X-CSRF-Token": token },
   });
 }
+
+export async function updateMe({ name, email }) {
+  const token = await csrf();
+  const r = await fetch(`${API}/auth/me`, {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": token,
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({ name, email }),
+  });
+  if (!r.ok) {
+    let msg = await r.text();
+    try { const j = JSON.parse(msg); msg = j.detail || msg; } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}

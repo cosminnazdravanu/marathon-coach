@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 import CalendarGrid from './components/CalendarGrid';
-import LoginForm from "./components/LoginForm";
+//import LoginForm from "./components/LoginForm";
 import TopBar from "./components/TopBar";
+import SettingsPage from "./pages/SettingsPage.jsx";
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState('training');
@@ -50,7 +51,7 @@ export default function App() {
     switch (activeMenu) {
       case 'training': return <CalendarGrid />;
       case 'stats':    return <div>Stats Placeholder</div>;
-      case 'settings': return <div>Settings Placeholder</div>;
+      case 'settings': return  <SettingsPage />;
       default:         return <div>Select an option</div>;
     }
   };

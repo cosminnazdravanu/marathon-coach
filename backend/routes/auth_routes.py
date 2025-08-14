@@ -3,11 +3,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from backend.db.session import SessionLocal
-from backend.db.models import User
 from backend.services.passwords import hash_password, verify_password
 import secrets
+from backend.deps.auth import get_db, get_current_user
+from backend.db.models import User
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+class UpdateMe(BaseModel):
+    name: str | None = None
+    email: EmailStr | None = None
 
 class RegisterIn(BaseModel):
     email: EmailStr
@@ -25,10 +30,10 @@ class UserOut(BaseModel):
     avatar_url: str | None = None
     class Config: from_attributes = True
 
-def get_db():
-    db = SessionLocal()
-    try: yield db
-    finally: db.close()
+# def get_db():
+#     db = SessionLocal()
+#     try: yield db
+#     finally: db.close()
 
 def require_csrf(request: Request):
     sess = request.session.get("csrf")
@@ -72,3 +77,39 @@ def me(request: Request, db: Session = Depends(get_db)):
     uid = request.session.get("user_id")
     if not uid: return None
     return db.get(User, uid)
+
+@router.put("/me")
+def update_me(
+    payload: UpdateMe,
+    request: Request,
+    db: Session = Depends(get_db),
+    me: User = Depends(get_current_user),
+):
+    # CSRF
+    sess = request.session.get("csrf")
+    hdr = request.headers.get("X-CSRF-Token")
+    if not sess or not hdr or hdr != sess:
+        raise HTTPException(status_code=403, detail="CSRF check failed")
+
+    # Reload user in this session
+    db_user = db.get(User, me.id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Email uniqueness (exclude me)
+    if payload.email and payload.email != db_user.email:
+        exists = (
+            db.query(User)
+              .filter(User.email == payload.email, User.id != db_user.id)
+              .first()
+        )
+        if exists:
+            raise HTTPException(status_code=400, detail="Email already in use")
+        db_user.email = payload.email
+
+    if payload.name is not None:
+        db_user.name = payload.name.strip()
+
+    db.commit()
+    db.refresh(db_user)
+    return {"id": db_user.id, "email": db_user.email, "name": db_user.name}

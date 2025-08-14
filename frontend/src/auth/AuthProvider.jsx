@@ -46,6 +46,11 @@ export default function AuthProvider({ children }) {
       setUser(u);
       return u;
     },
+    async refresh() {
+      const u = await apiMe();
+      setUser(u);
+      return u;
+    },
     async register(email, password, name) {
       const u = await apiRegister(email, password, name);
       setUser(u);
